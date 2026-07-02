@@ -434,8 +434,8 @@ tbody td{padding:6px 10px;color:var(--text-dark);white-space:nowrap}
 <script>
 // ── CONFIG GOOGLE SHEETS ────────────────────────────────────────────────────
 const SHEET_ID   = '1jdbAoEv35ec5SRM6Q8-DcjIV7Z6kgFMR68HAbhZKpoU';
-const SHEET_NAME = 'PRODUTIVIDADE BANCO DE DADOS';
-const SHEET_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+const SHEET_GID  = '1494307811';
+const SHEET_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
 
 // ── UTILS ────────────────────────────────────────────────────────────────────
 function padZ(n){return String(n).padStart(2,'0')}
