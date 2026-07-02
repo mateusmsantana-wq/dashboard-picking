@@ -433,10 +433,7 @@ tbody td{padding:6px 10px;color:var(--text-dark);white-space:nowrap}
 
 <script>
 // ── CONFIG GOOGLE SHEETS ────────────────────────────────────────────────────
-const SHEET_ID   = '1jdbAoEv35ec5SRM6Q8-DcjIV7Z6kgFMR68HAbhZKpoU';
-const SHEET_GID  = '1494307811';
-const DIRECT_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
-const SHEET_URL  = `https://api.allorigins.win/raw?url=${encodeURIComponent(DIRECT_URL)}`;
+const SHEET_URL = 'https://script.google.com/a/macros/mercadolivre.com/s/AKfycbwrDAz6nb-12iW6_mYFLVKSXL5HEYI-y4n5r7Ytl5KL4Yx1tllI-MJzxioi9_LLYXYQ/exec';
 
 // ── UTILS ────────────────────────────────────────────────────────────────────
 function padZ(n){return String(n).padStart(2,'0')}
@@ -500,14 +497,51 @@ async function fetchSheetData(){
   try {
     const res = await fetch(SHEET_URL);
     if(!res.ok) throw new Error(`Erro HTTP ${res.status}`);
-    const csv = await res.text();
-    parseCSVtoData(csv);
+    const json = await res.json();
+    parseJSONtoData(json);
     updateLastFetch();
   } catch(e) {
-    alert('⚠️ Não foi possível carregar os dados da planilha.\n\nVerifique se ela está publicada na web (Arquivo → Publicar na web → CSV).\n\nErro: '+e.message);
+    alert('⚠️ Não foi possível carregar os dados.\n\nErro: '+e.message);
   } finally {
     setLoading(false);
   }
+}
+
+function parseJSONtoData(rows){
+  if(!rows || !rows.length){ alert('Planilha vazia ou sem dados.'); return; }
+
+  RAW_DATA = rows.map(r => {
+    const iso   = isoFromBR(String(r['DATA'] || r['Data'] || ''));
+    const label = labelFromIso(iso);
+    return {
+      iso, label,
+      registro:      String(r['REGISTRO']        || ''),
+      dataAut:       String(r['DATA AUT']         || ''),
+      ceiaAut:       String(r['CEIA AUT']         || ''),
+      estado:        String(r['Estado actual']    || ''),
+      processo:      String(r['PROCESSO']         || 'Picking'),
+      id:            String(r['ID']               || '').trim(),
+      nome:          String(r['REPRESENAT']       || r['REPRESENTANTE'] || '').trim(),
+      liquida:       parseNum(r['LIQUIDA']),
+      efetiva:       parseNum(r['EFETIVA']),
+      utilizacao:    parseUtil(r['UTILIZAÇÃO']    || r['UTILIZACAO'] || 0),
+      tempSistemico: String(r['TEMP SISTEMICO']   || ''),
+      tempEfetivo:   String(r['TEMP EFETIVO']     || ''),
+      unidades:      parseNum(r['UNIDADES']),
+      status:        String(r['STATUS']           || ''),
+    };
+  }).filter(r => r.id || r.iso);
+
+  RAW_DATA.sort((a,b) => b.iso.localeCompare(a.iso));
+  filtered = [...RAW_DATA];
+
+  const datas = RAW_DATA.map(r=>r.iso).filter(Boolean).sort();
+  if(datas.length){
+    document.getElementById('f-date-start').value = datas[0];
+    document.getElementById('f-date-end').value   = datas[datas.length-1];
+  }
+
+  render();
 }
 
 function updateLastFetch(){
