@@ -349,19 +349,22 @@ tbody td{padding:6px 10px;color:var(--text-dark);white-space:nowrap}
       </div>
     </div>
 
-    <!-- ROSCA TOP 3 UTILIZAÇÃO -->
-    <div class="panel">
+    <!-- TOP 3 UTILIZAÇÃO + TOP 3 LÍQUIDA com medalhas -->
+    <div class="panel" style="display:flex;flex-direction:column;overflow:hidden">
       <div class="panel-header">
-        <div>
-          <div class="panel-title">🎯 Top 3 Utilização</div>
-          <div class="panel-sub">melhores do período</div>
-        </div>
+        <div class="panel-title">🎯 Top 3 — Utilização & Líquida</div>
       </div>
-      <div class="panel-body" style="display:flex;flex-direction:column;gap:0">
-        <div class="chart-wrap" style="height:170px">
-          <canvas id="chart-donut"></canvas>
+      <div class="panel-body" style="padding:8px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:0;overflow:hidden">
+        <!-- TOP 3 UTILIZAÇÃO -->
+        <div style="border-right:1px solid var(--border);padding:0 4px">
+          <div style="font-size:9px;font-weight:700;color:var(--ml-blue);text-transform:uppercase;letter-spacing:.06em;padding:4px 10px 6px">⚡ Utilização</div>
+          <div id="ranking-util"></div>
         </div>
-        <div class="donut-legend" id="donut-legend"></div>
+        <!-- TOP 3 LÍQUIDA -->
+        <div style="padding:0 4px">
+          <div style="font-size:9px;font-weight:700;color:var(--ml-blue);text-transform:uppercase;letter-spacing:.06em;padding:4px 10px 6px">💧 Líquida</div>
+          <div id="ranking-liq"></div>
+        </div>
       </div>
     </div>
 
@@ -790,42 +793,51 @@ function renderTable(){
   }).join('');
 }
 
-// ── ROSCA TOP 3 ─────────────────────────────────────────────────────────────
-const DONUT_COLORS=['#2D3277','#FFE600','#00A650'];
+// ── TOP 3 UTILIZAÇÃO E LÍQUIDA COM MEDALHAS ─────────────────────────────────
+const MEDALS_TOP=['🥇','🥈','🥉'];
+const MEDAL_COLORS_TOP=['#FFE600','#2D3277','#00A650'];
 
-function renderDonut(){
-  // média de utilização por rep
+function buildRepMap(){
   const byRep={};
   filtered.forEach(r=>{
-    if(!byRep[r.id]) byRep[r.id]={nome:r.nome||r.id,id:r.id,sum:0,cnt:0};
-    byRep[r.id].sum+=r.utilizacao;
+    if(!byRep[r.id]) byRep[r.id]={nome:r.nome||'',id:r.id,util:0,liq:0,cnt:0};
+    byRep[r.id].util+=r.utilizacao;
+    byRep[r.id].liq +=r.liquida;
     byRep[r.id].cnt++;
   });
-  const sorted=Object.values(byRep).map(x=>({nome:x.nome||x.id,id:x.id,avg:x.sum/x.cnt}))
-    .sort((a,b)=>b.avg-a.avg).slice(0,3);
+  return Object.values(byRep).map(x=>({
+    id:x.id, nome:x.nome||x.id,
+    util: x.util/x.cnt,
+    liq:  x.liq/x.cnt,
+  }));
+}
 
-  const labels=sorted.map(x=>x.nome?x.nome.split(' ')[0]:x.id);
-  const vals=sorted.map(x=>parseFloat(x.avg.toFixed(1)));
-  const total=vals.reduce((s,v)=>s+v,0);
-
-  if(donutChart) donutChart.destroy();
-  const ctx=document.getElementById('chart-donut').getContext('2d');
-  donutChart=new Chart(ctx,{
-    type:'doughnut',
-    data:{labels,datasets:[{data:vals,backgroundColor:DONUT_COLORS,borderWidth:0,spacing:2}]},
-    options:{
-      responsive:true,maintainAspectRatio:false,cutout:'68%',
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${c.parsed.toFixed(1)}%`}}}
-    }
-  });
-
-  const leg=document.getElementById('donut-legend');
-  leg.innerHTML=sorted.map((x,i)=>`
-    <div class="dl-item">
-      <div class="dl-dot" style="background:${DONUT_COLORS[i]}"></div>
-      <div class="dl-name">${x.nome||x.id}</div>
-      <div class="dl-pct">${x.avg.toFixed(1)}%</div>
+function renderMedalList(elId, items, valueKey, suffix){
+  const el=document.getElementById(elId);
+  if(!el||!items.length){if(el)el.innerHTML='';return;}
+  const max=items[0][valueKey]||1;
+  el.innerHTML=items.map((r,i)=>`
+    <div class="rank-item">
+      <div class="medal">${MEDALS_TOP[i]}</div>
+      <div class="rank-info">
+        <div class="rank-name">${r.nome.split(' ')[0]||r.id}</div>
+        <div class="rank-id">ID ${r.id}</div>
+        <div class="rank-bar-wrap">
+          <div class="rank-bar-fill" style="width:${Math.round(r[valueKey]/max*100)}%;background:${MEDAL_COLORS_TOP[i]}"></div>
+        </div>
+      </div>
+      <div class="rank-value">
+        <div class="rank-num" style="color:${MEDAL_COLORS_TOP[i]};font-size:14px">${typeof r[valueKey]==='number'?r[valueKey].toFixed(1):r[valueKey]}${suffix}</div>
+      </div>
     </div>`).join('');
+}
+
+function renderDonut(){
+  const reps = buildRepMap();
+  const topUtil = [...reps].sort((a,b)=>b.util-a.util).slice(0,3);
+  const topLiq  = [...reps].sort((a,b)=>b.liq-a.liq).slice(0,3);
+  renderMedalList('ranking-util', topUtil, 'util', '%');
+  renderMedalList('ranking-liq',  topLiq,  'liq',  '');
 }
 
 // ── LINHA EVOLUÇÃO ──────────────────────────────────────────────────────────
