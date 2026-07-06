@@ -333,15 +333,14 @@ tbody td{padding:6px 10px;color:var(--text-dark);white-space:nowrap}
           <table id="main-table">
             <thead>
               <tr>
-                <th onclick="sortTable('data')">DATA ↕</th>
                 <th onclick="sortTable('processo')">PROCESSO ↕</th>
                 <th onclick="sortTable('id')">ID ↕</th>
-                <th onclick="sortTable('liquida')">LÍQUIDA ↕</th>
-                <th onclick="sortTable('efetiva')">EFETIVA ↕</th>
-                <th onclick="sortTable('utilizacao')">UTILIZAÇÃO ↕</th>
-                <th onclick="sortTable('tempSistemico')">T. SISTÊMICO ↕</th>
-                <th onclick="sortTable('tempEfetivo')">T. EFETIVO ↕</th>
-                <th onclick="sortTable('unidades')">UNIDADES ↕</th>
+                <th onclick="sortTable('liquida')">LÍQUIDA MÉD ↕</th>
+                <th onclick="sortTable('efetiva')">EFETIVA MÉD ↕</th>
+                <th onclick="sortTable('utilizacao')">UTILIZAÇÃO MÉD ↕</th>
+                <th onclick="sortTable('tempSistemico')">T. SISTÊMICO MÉD ↕</th>
+                <th onclick="sortTable('tempEfetivo')">T. EFETIVO MÉD ↕</th>
+                <th onclick="sortTable('unidades')">UNIDADES TOTAL ↕</th>
               </tr>
             </thead>
             <tbody id="tbl-body"></tbody>
@@ -521,7 +520,7 @@ function parseJSONtoData(rows){
       estado:        String(r['Estado actual']    || ''),
       processo:      String(r['PROCESSO']         || 'Picking'),
       id:            String(r['ID']               || '').trim(),
-      nome:          String(r['REPRESENAT']       || r['REPRESENTANTE'] || '').trim(),
+      nome:          String(r['REPRESENAT'] || r['REPRESENTANTE'] || r['Representante'] || '').trim(),
       liquida:       parseNum(r['LIQUIDA']),
       efetiva:       parseNum(r['EFETIVA']),
       utilizacao:    parseUtil(r['UTILIZAÇÃO']    || r['UTILIZACAO'] || 0),
@@ -703,7 +702,25 @@ function renderKPIs(){
 }
 
 // ── TABELA ─────────────────────────────────────────────────────────────────
-function utilClass(u){return u>=85?'util-hi':u>=70?'util-md':'util-lo'}
+function timeToSec(val){
+  if(!val) return 0;
+  const s=String(val);
+  if(s.includes('T')){
+    const t=new Date(s);
+    if(!isNaN(t)) return t.getUTCHours()*3600+t.getUTCMinutes()*60+t.getUTCSeconds();
+  }
+  const parts=s.split(':');
+  if(parts.length>=2) return parseInt(parts[0])*3600+parseInt(parts[1])*60+(parseInt(parts[2])||0);
+  return 0;
+}
+
+function secToHMS(sec){
+  const s=Math.round(sec);
+  const h=Math.floor(s/3600);
+  const m=Math.floor((s%3600)/60);
+  const ss=s%60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+}
 
 function renderTable(){
   const tbody = document.getElementById('tbl-body');
@@ -712,25 +729,63 @@ function renderTable(){
     document.getElementById('tbl-sub').textContent='Sem dados';
     return;
   }
-  document.getElementById('tbl-sub').textContent=`${filtered.length} registros`;
-  tbody.innerHTML = filtered.map(r=>{
+
+  // Consolida por ID
+  const byId={};
+  filtered.forEach(r=>{
+    if(!byId[r.id]) byId[r.id]={
+      id:r.id, processo:r.processo, nome:r.nome,
+      liquida:0, efetiva:0, utilizacao:0,
+      tSistSec:0, tEfeSec:0,
+      unidades:0, cnt:0
+    };
+    const b=byId[r.id];
+    b.liquida    += r.liquida;
+    b.efetiva    += r.efetiva;
+    b.utilizacao += r.utilizacao;
+    b.unidades   += r.unidades;
+    b.tSistSec   += timeToSec(r.tempSistemico);
+    b.tEfeSec    += timeToSec(r.tempEfetivo);
+    b.cnt++;
+  });
+
+  let rows = Object.values(byId).map(b=>({
+    ...b,
+    liquida:    b.liquida/b.cnt,
+    efetiva:    b.efetiva/b.cnt,
+    utilizacao: b.utilizacao/b.cnt,
+    tSistFmt:   secToHMS(b.tSistSec/b.cnt),
+    tEfeFmt:    secToHMS(b.tEfeSec/b.cnt),
+  }));
+
+  // ordena
+  if(sortKey){
+    const keyMap={liquida:'liquida',efetiva:'efetiva',utilizacao:'utilizacao',unidades:'unidades',id:'id',data:'id',processo:'processo'};
+    const k=keyMap[sortKey]||sortKey;
+    rows.sort((a,b)=>{
+      const av=a[k],bv=b[k];
+      return typeof av==='string'?av.localeCompare(bv)*sortDir:(av-bv)*sortDir;
+    });
+  }
+
+  document.getElementById('tbl-sub').textContent=`${rows.length} representantes`;
+  tbody.innerHTML = rows.map(r=>{
     const uc = utilClass(r.utilizacao);
     const pct = Math.min(r.utilizacao,100);
     return `<tr>
-      <td>${r.label}</td>
       <td>${r.processo}</td>
       <td><strong>${r.id}</strong></td>
-      <td>${r.liquida}</td>
-      <td style="color:var(--pbi-orange);font-weight:600">${r.efetiva}</td>
+      <td>${Math.round(r.liquida)}</td>
+      <td style="color:var(--ml-orange);font-weight:600">${Math.round(r.efetiva)}</td>
       <td>
         <div class="util-bar">
           <div class="util-bg"><div class="util-fill ${uc}" style="width:${pct}%"></div></div>
-          <span class="util-pct" style="color:${uc==='util-hi'?'var(--pbi-green)':uc==='util-md'?'var(--pbi-orange)':'var(--pbi-red)'}">${r.utilizacao.toFixed(2)}%</span>
+          <span class="util-pct" style="color:${uc==='util-hi'?'var(--ml-green)':uc==='util-md'?'var(--ml-orange)':'var(--ml-red)'}">${r.utilizacao.toFixed(2)}%</span>
         </div>
       </td>
-      <td>${r.tempSistemico}</td>
-      <td>${r.tempEfetivo}</td>
-      <td style="font-weight:600">${r.unidades}</td>
+      <td>${r.tSistFmt}</td>
+      <td>${r.tEfeFmt}</td>
+      <td style="font-weight:600">${r.unidades.toLocaleString('pt-BR')}</td>
     </tr>`;
   }).join('');
 }
@@ -742,14 +797,14 @@ function renderDonut(){
   // média de utilização por rep
   const byRep={};
   filtered.forEach(r=>{
-    if(!byRep[r.id]) byRep[r.id]={nome:r.nome,sum:0,cnt:0};
+    if(!byRep[r.id]) byRep[r.id]={nome:r.nome||r.id,id:r.id,sum:0,cnt:0};
     byRep[r.id].sum+=r.utilizacao;
     byRep[r.id].cnt++;
   });
-  const sorted=Object.values(byRep).map(x=>({nome:x.nome,avg:x.sum/x.cnt}))
+  const sorted=Object.values(byRep).map(x=>({nome:x.nome||x.id,id:x.id,avg:x.sum/x.cnt}))
     .sort((a,b)=>b.avg-a.avg).slice(0,3);
 
-  const labels=sorted.map(x=>x.nome.split(' ')[0]);
+  const labels=sorted.map(x=>x.nome?x.nome.split(' ')[0]:x.id);
   const vals=sorted.map(x=>parseFloat(x.avg.toFixed(1)));
   const total=vals.reduce((s,v)=>s+v,0);
 
@@ -768,7 +823,7 @@ function renderDonut(){
   leg.innerHTML=sorted.map((x,i)=>`
     <div class="dl-item">
       <div class="dl-dot" style="background:${DONUT_COLORS[i]}"></div>
-      <div class="dl-name">${x.nome}</div>
+      <div class="dl-name">${x.nome||x.id}</div>
       <div class="dl-pct">${x.avg.toFixed(1)}%</div>
     </div>`).join('');
 }
